@@ -40,11 +40,14 @@ int make_connection(char *address_string) {
   // initialize socket according to getaddrinfo results
   sock = socket(addr_result->ai_family, addr_result->ai_socktype, addr_result->ai_protocol);
   if (sock < 0)
-    syserr("socket");
+    return -1;
 
   // connect socket to the server
   if (connect(sock, addr_result->ai_addr, addr_result->ai_addrlen) < 0)
-    syserr("connect");
+    return -1;
 
   freeaddrinfo(addr_result);
+  
+  return sock;
 }
+

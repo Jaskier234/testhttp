@@ -1,17 +1,23 @@
-TARGET=testhttp_raw
+TARGET: testhttp_raw test
 
 CC=gcc
 CFLAGS=-O2
 DEPS=err.h connect.h
-OBJ=testhttp_raw.o err.o connect.o
+OBJ=err.o connect.o
+
+debug: CFLAGS += -g
+debug: testhttp_raw test
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-testhttp_raw: $(OBJ)
-	$(CC) -o testhttp_raw $(OBJ)
+testhttp_raw: $(OBJ) testhttp_raw.o
+	$(CC) -o testhttp_raw $^
+
+test: $(OBJ) test.o
+	$(CC) -o test $^
  
 .PHONY: clean
 
 clean:
-	rm *.o testhttp_raw
+	rm *.o testhttp_raw test
