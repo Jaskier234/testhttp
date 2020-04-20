@@ -2,8 +2,8 @@ TARGET: testhttp_raw test
 
 CC=gcc
 CFLAGS=-O2
-DEPS=err.h connect.h
-OBJ=err.o connect.o
+DEPS=err.h connect.h http.h
+OBJ=err.o connect.o http.o
 
 debug: CFLAGS += -g
 debug: testhttp_raw test
