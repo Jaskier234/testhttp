@@ -18,6 +18,8 @@ char HOST[] = "Host";
 char CONNECTION[] = "Connection";
 char CLOSE[] = "close";
 char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
+char COOKIE[] = "Cookie";
+char COOKIE_VERSION[] = "$Version=0;";
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -93,12 +95,21 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   char *cookie_buffer = NULL;
   size_t cookie_buffer_len = 0;
   int res;
+  
+  http_message cookie_value;
+  initialize_http_message(&cookie_value);
 
   while ((res = getline(&cookie_buffer, &cookie_buffer_len, cookies)) != -1) {
-    size_t cookie_len = strlen(cookie_buffer);
-    printf("cookie len: %ld buffer len: %ld\n", cookie_len, cookie_buffer_len);
+    char *newline = strchr(cookie_buffer, '\n');
+    if (newline != NULL) {
+      *newline = 0;
+    }
+    cookie_value.length = 0;
 
-    if (add_header(message, (char*)&SET_COOKIE, cookie_buffer) != 0) {
+    if (append(&cookie_value, (char*)&COOKIE_VERSION, strlen((char*)&COOKIE_VERSION)) != 0) return -1; 
+    if (append(&cookie_value, cookie_buffer, strlen(cookie_buffer)) != 0) return -1; 
+
+    if (add_header(message, (char*)&COOKIE, cookie_value.message) != 0) {
       return -1;
     }
   }
@@ -109,9 +120,7 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
     return -1;
   }
 
-  size_t cookie_len = strlen(cookie_buffer);
-  printf("cookie len: %ld buffer len: %ld\n", cookie_len, cookie_buffer_len);
-
+  // Endind empty line
   if (append(message, CRLF, strlen(CRLF)) != 0) return -1;
 
   return 0;
