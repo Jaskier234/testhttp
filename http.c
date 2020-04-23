@@ -13,6 +13,7 @@ char METHOD[] = "GET";
 #define METHOD_LEN 3
 char HTTP_VERSION[] = "HTTP/1.1";
 #define HTTP_VERSION_LEN 8
+char HOST[] = "Host";
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -42,7 +43,7 @@ int extend_message_capacity(http_message *message, size_t new_capacity) {
   return 0;
 }
 
-int add_status_line(http_message *message, char *target_url) {
+int add_status_line_and_host(http_message *message, char *target_url) {
   // parse target url
   if (memcmp(target_url, &HTTP, HTTP_LEN) == 0) {
     target_url += HTTP_LEN;
@@ -51,6 +52,7 @@ int add_status_line(http_message *message, char *target_url) {
   } else {
     return -1; // Incorrect url
   }
+  char *host = target_url;
   target_url = strchr(target_url, '/');
   size_t target_url_len = strlen(target_url);
 
@@ -75,9 +77,11 @@ int add_status_line(http_message *message, char *target_url) {
   message->length += HTTP_VERSION_LEN;
 
   strcpy(message->message + message->length, CRLF);
-  message->length + 2;
+  message->length += 2;
 
-  return 0;
+  *target_url = 0; // set first byte of target url to 0 so that host contains correct address.
+
+  return add_header(message, (char*)&HOST, host);
 }
 
 int add_header(http_message *message, char *header_name, char *value) {
@@ -90,21 +94,21 @@ int add_header(http_message *message, char *header_name, char *value) {
     return -1;
 
   strcpy(message->message + message->length, header_name);
-  message->length + header_name_len;
+  message->length += header_name_len;
 
   strcpy(message->message + message->length, ":");
-  message->length + 1;
+  message->length += 1;
   
   strcpy(message->message + message->length, value);
-  message->length + value_len;
+  message->length += value_len;
 
   strcpy(message->message + message->length, CRLF);
-  message->length + 2;
+  message->length += 2;
 
   return 0;
 }
 
 void end_message(http_message *message) {
   strcpy(message->message + message->length, CRLF);
-  message->length + 2;
+  message->length += 2;
 }
