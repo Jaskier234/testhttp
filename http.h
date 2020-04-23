@@ -18,6 +18,9 @@ int initialize_http_message(http_message*);
 // is at least new_size.
 int extend_message_capacity(http_message *message, size_t new_capacity);
 
+// Appends given string to message.
+int append(http_message *message, char * const string, size_t size);
+
 // Add request status line. 
 // Second parameter is full URL of target site.
 // Returns 0 on success and -1 on failure.

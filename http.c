@@ -47,9 +47,19 @@ int extend_message_capacity(http_message *message, size_t new_capacity) {
   return 0;
 }
 
+int append(http_message *message, char * const string, size_t size) {
+  // +4 for buffer
+  if(extend_message_capacity(message, message->length + size + 4) != 0)
+    return -1;
+
+  memcpy(message->message + message->length, string, size);
+  message->length += size;
+  
+  return 0;
+}
+
 int generate_request(http_message *message, char *target_url, char *cookie_file) {
   // parse target url
-  // TODO może trzeba przenieść to do innej funkcji
   if (memcmp(target_url, &HTTP, HTTP_LEN) == 0) {
     target_url += HTTP_LEN;
   } else if (memcmp(target_url, &HTTPS, HTTPS_LEN) == 0) {
@@ -57,32 +67,16 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   } else {
     return -1; // Incorrect url
   }
+
   char *host = target_url;
   target_url = strchr(target_url, '/');
-  size_t target_url_len = strlen(target_url);
-
-  size_t status_line_len = METHOD_LEN  + 1 + target_url_len + 1 + HTTP_VERSION_LEN; // +1 for whitespaces
-
-  if(extend_message_capacity(message, status_line_len + 4) != 0) // +4 for buffer
-    return -1;
-
-  strcpy(message->message + message->length, METHOD);
-  message->length += METHOD_LEN;
-
-  strcpy(message->message + message->length, " ");
-  message->length += 1;
-
-  strcpy(message->message + message->length, target_url);
-  message->length += target_url_len;
-
-  strcpy(message->message + message->length, " ");
-  message->length += 1;
-
-  strcpy(message->message + message->length, HTTP_VERSION);
-  message->length += HTTP_VERSION_LEN;
-
-  strcpy(message->message + message->length, CRLF);
-  message->length += 2;
+  
+  if (append(message, METHOD, strlen(METHOD)) != 0) return -1; 
+  if (append(message, " ", 1) != 0) return -1; 
+  if (append(message, target_url, strlen(target_url)) != 0) return -1; 
+  if (append(message, " ", 1) != 0) return -1; 
+  if (append(message, HTTP_VERSION, strlen(HTTP_VERSION)) != 0) return -1; 
+  if (append(message, CRLF, strlen(CRLF)) != 0) return -1; 
 
   *target_url = 0; // set first byte of target url to 0 so that host contains correct address.
 
@@ -107,11 +101,8 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
     if (add_header(message, (char*)&SET_COOKIE, cookie_buffer) != 0) {
       return -1;
     }
-
-    free(cookie_buffer);
-    cookie_buffer = NULL;
-    cookie_buffer_len = 0;
   }
+  free(cookie_buffer);
 
   // Set connection close 
   if (add_header(message, (char*)&CONNECTION, (char*)&CLOSE) != 0) {
@@ -121,36 +112,20 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   size_t cookie_len = strlen(cookie_buffer);
   printf("cookie len: %ld buffer len: %ld\n", cookie_len, cookie_buffer_len);
 
-  end_message(message);  
+  if (append(message, CRLF, strlen(CRLF)) != 0) return -1;
 
   return 0;
 }
 
 int add_header(http_message *message, char *header_name, char *value) {
-  int header_name_len = strlen(header_name);
-  int value_len = strlen(value);
-  // one char for ":", two for CRLF, one for NULL at the end and 4 more as a buffer
-  int header_len = header_name_len + value_len + 8;
-
-  if(extend_message_capacity(message, message->length + header_len) != 0) 
-    return -1;
-
-  strcpy(message->message + message->length, header_name);
-  message->length += header_name_len;
-
-  strcpy(message->message + message->length, ":");
-  message->length += 1;
-  
-  strcpy(message->message + message->length, value);
-  message->length += value_len;
-
-  strcpy(message->message + message->length, CRLF);
-  message->length += 2;
+  if (append(message, header_name, strlen(header_name)) != 0) return -1;
+  if (append(message, ":", 1) != 0) return -1;
+  if (append(message, value, strlen(value)) != 0) return -1;
+  if (append(message, CRLF, strlen(CRLF)) != 0) return -1;
 
   return 0;
 }
 
+// TODO czy ta funkcja potrzebna?
 void end_message(http_message *message) {
-  strcpy(message->message + message->length, CRLF);
-  message->length += 2;
 }
