@@ -1,11 +1,18 @@
 #include "http.h"
+#include <string.h>
+#include <stdlib.h>
 
 #define INITIAL_MESSAGE_SIZE 256 // TODO sprawdzić zalecenia standardu
 #define CRLF "\r\n"
-char HTTP[] = "http://"
+#define SP " "
+char HTTP[] = "http://";
 #define HTTP_LEN 7
-char HTTPS[] = "https//"
+char HTTPS[] = "https://";
 #define HTTPS_LEN 8
+char METHOD[] = "GET";
+#define METHOD_LEN 3
+char HTTP_VERSION[] = "HTTP/1.1";
+#define HTTP_VERSION_LEN 8
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -44,16 +51,31 @@ int add_status_line(http_message *message, char *target_url) {
   } else {
     return -1; // Incorrect url
   }
-  target_url = strchr(target_url, '/') + 1;
+  target_url = strchr(target_url, '/');
+  size_t target_url_len = strlen(target_url);
 
-  char status_line[] = "GET " + target_url + " HTTP/1.1";
-  size_t status_line_len = strlen(status_line)
+  size_t status_line_len = METHOD_LEN  + 1 + target_url_len + 1 + HTTP_VERSION_LEN; // +1 for whitespaces
 
   if(extend_message_capacity(message, status_line_len + 4) != 0) // +4 for buffer
     return -1;
 
-  strcpy(message->message, status_line);
-  message->length = status_line_len;
+  strcpy(message->message + message->length, METHOD);
+  message->length += METHOD_LEN;
+
+  strcpy(message->message + message->length, " ");
+  message->length += 1;
+
+  strcpy(message->message + message->length, target_url);
+  message->length += target_url_len;
+
+  strcpy(message->message + message->length, " ");
+  message->length += 1;
+
+  strcpy(message->message + message->length, HTTP_VERSION);
+  message->length += HTTP_VERSION_LEN;
+
+  strcpy(message->message + message->length, CRLF);
+  message->length + 2;
 
   return 0;
 }
