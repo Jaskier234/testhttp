@@ -43,7 +43,7 @@ int extend_message_capacity(http_message *message, size_t new_capacity) {
   return 0;
 }
 
-int add_status_line_and_host(http_message *message, char *target_url) {
+int generate_request(http_message *message, char *target_url, char *cookie_file) {
   // parse target url
   if (memcmp(target_url, &HTTP, HTTP_LEN) == 0) {
     target_url += HTTP_LEN;

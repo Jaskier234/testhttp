@@ -21,7 +21,7 @@ int extend_message_capacity(http_message *message, size_t new_capacity);
 // Add request status line. 
 // Second parameter is full URL of target site.
 // Returns 0 on success and -1 on failure.
-int add_status_line_and_host(http_message *message, char *target_url);
+int generate_request(http_message *message, char *target_url, char *cookie_file);
 
 // Add header to http messsage
 // returns 0 on success or -1 if error occurs.
