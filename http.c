@@ -1,6 +1,7 @@
 #include "http.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define INITIAL_MESSAGE_SIZE 256 // TODO sprawdzić zalecenia standardu
 #define CRLF "\r\n"
@@ -14,6 +15,9 @@ char METHOD[] = "GET";
 char HTTP_VERSION[] = "HTTP/1.1";
 #define HTTP_VERSION_LEN 8
 char HOST[] = "Host";
+char CONNECTION[] = "Connection";
+char CLOSE[] = "close";
+char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -45,6 +49,7 @@ int extend_message_capacity(http_message *message, size_t new_capacity) {
 
 int generate_request(http_message *message, char *target_url, char *cookie_file) {
   // parse target url
+  // TODO może trzeba przenieść to do innej funkcji
   if (memcmp(target_url, &HTTP, HTTP_LEN) == 0) {
     target_url += HTTP_LEN;
   } else if (memcmp(target_url, &HTTPS, HTTPS_LEN) == 0) {
@@ -81,7 +86,44 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
 
   *target_url = 0; // set first byte of target url to 0 so that host contains correct address.
 
-  return add_header(message, (char*)&HOST, host);
+  if (add_header(message, (char*)&HOST, host) != 0) {
+    return -1;
+  }
+
+  // Set cookies
+  FILE *cookies = fopen(cookie_file, "r");
+  if (cookies == NULL) {
+    return -1; // cookie file does not exist
+  }
+
+  char *cookie_buffer = NULL;
+  size_t cookie_buffer_len = 0;
+  int res;
+
+  while ((res = getline(&cookie_buffer, &cookie_buffer_len, cookies)) != -1) {
+    size_t cookie_len = strlen(cookie_buffer);
+    printf("cookie len: %ld buffer len: %ld\n", cookie_len, cookie_buffer_len);
+
+    if (add_header(message, (char*)&SET_COOKIE, cookie_buffer) != 0) {
+      return -1;
+    }
+
+    free(cookie_buffer);
+    cookie_buffer = NULL;
+    cookie_buffer_len = 0;
+  }
+
+  // Set connection close 
+  if (add_header(message, (char*)&CONNECTION, (char*)&CLOSE) != 0) {
+    return -1;
+  }
+
+  size_t cookie_len = strlen(cookie_buffer);
+  printf("cookie len: %ld buffer len: %ld\n", cookie_len, cookie_buffer_len);
+
+  end_message(message);  
+
+  return 0;
 }
 
 int add_header(http_message *message, char *header_name, char *value) {
@@ -90,7 +132,7 @@ int add_header(http_message *message, char *header_name, char *value) {
   // one char for ":", two for CRLF, one for NULL at the end and 4 more as a buffer
   int header_len = header_name_len + value_len + 8;
 
-  if(extend_message_capacity(message, header_len) != 0) 
+  if(extend_message_capacity(message, message->length + header_len) != 0) 
     return -1;
 
   strcpy(message->message + message->length, header_name);
