@@ -15,27 +15,30 @@ int initialize_http_message(http_message *message) {
   return 0;
 } 
 
-int add_header(http_message *message, char *header_name, char *value) {
-  int header_name_len = strlen(header_name);
-  int value_len = strlen(value);
-  // one char for ":", two for CRLF, one for NULL at the end and 4 more so that
-  // realloc in end_message is not needed.
-  int header_len = header_name_len + value_len + 8;
+int extend_message_capacity(http_message *message, size_t new_capacity) {
+  if (new_capacity > message->capacity) { 
+    new_capacity *= 2;
 
-  // realloc if capacity is too small
-  if (message->length + header_len > message->capacity) { 
-    int new_size = message->capacity * 2;
-    if (new_size < message->length + header_len) { // in case capacity*2 is to small
-      new_size = message->length + header_len;
-    }
-
-    message->message = realloc(message->message, new_size);
-    if (message->message == NULL) {
+    void *new_message = realloc(message->message, new_capacity);
+    if (new_message == NULL) {
       return -1;
     }
 
-    message->capacity = new_size;
+    message->message = new_message;
+    message->capacity = new_capacity;
   }
+
+  return 0;
+}
+
+int add_header(http_message *message, char *header_name, char *value) {
+  int header_name_len = strlen(header_name);
+  int value_len = strlen(value);
+  // one char for ":", two for CRLF, one for NULL at the end and 4 more as a buffer
+  int header_len = header_name_len + value_len + 8;
+
+  if(extend_message_capacity(message, header_len) != 0) 
+    return -1;
 
   strcpy(message->message + message->length, header_name);
   message->length + header_name_len;
