@@ -37,7 +37,7 @@ void add_status_line_test();
 
 int main(int argc, char *argv[]) {
   make_connection_test();
-  add_status_line_test();
+//  add_status_line_test();
 
   printf("Tests finished\n");
 
@@ -66,33 +66,33 @@ void make_connection_test() {
   if (!failed) printf("make_connection() passed\n");
 } 
 
-void add_status_line_test() {
-  http_message message1;
-
-  int failed = 0;
-
-  for (int i = 0; i < URL_TESTS_NEG; i++) {
-    if (add_status_line(NULL, test_url[i]) == 0) {
-      printf("make_test_connection() test %d failed\n", i);
-      failed = 1;
-    }
-  }
-  
-  char long_url[10040] = "https://";
-
-  memset(long_url + 8, 'a', 9000);
-
-  long_url[20] = '/';
-
-  if (add_status_line(&message1, long_url) != 0) {
-    printf("add_status_line long_url test failed\n");
-    failed = 1;
-  }
-
-  // TODO:
-  // -incorrect addresses
-  // -long adderss
-  // -correct addresses
-  
-  if (!failed) printf("add_status_line_test() passed\n");
-}
+//void add_status_line_test() {
+//  http_message message1;
+//
+//  int failed = 0;
+//
+//  for (int i = 0; i < URL_TESTS_NEG; i++) {
+//    if (add_status_line(NULL, test_url[i]) == 0) {
+//      printf("make_test_connection() test %d failed\n", i);
+//      failed = 1;
+//    }
+//  }
+//  
+//  char long_url[10040] = "https://";
+//
+//  memset(long_url + 8, 'a', 9000);
+//
+//  long_url[20] = '/';
+//
+//  if (add_status_line(&message1, long_url) != 0) {
+//    printf("add_status_line long_url test failed\n");
+//    failed = 1;
+//  }
+//
+//  // TODO:
+//  // -incorrect addresses
+//  // -long adderss
+//  // -correct addresses
+//  
+//  if (!failed) printf("add_status_line_test() passed\n");
+//}
