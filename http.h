@@ -9,6 +9,15 @@ typedef struct {
   size_t capacity; // size of allocated memory
 } http_message;
 
+typedef struct {
+  http_message cookies;
+  size_t content_length;
+  size_t real_body_length;
+  int chunked;
+  int status_code;
+  int failed;
+} parsed_http_response;
+
 // Initialize http message
 int initialize_http_message(http_message*);
 
@@ -29,6 +38,9 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
 // Add header to http messsage
 // returns 0 on success or -1 if error occurs.
 int add_header(http_message* message, char* header, char *value);
+
+// Parse http response.
+parsed_http_response parse_message(int fd);
 
 // Add CRLF at the end of the message
 void end_message(http_message *message);

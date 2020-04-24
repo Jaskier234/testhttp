@@ -2,8 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 
-#define INITIAL_MESSAGE_SIZE 256 // TODO sprawdzić zalecenia standardu
+#define INITIAL_MESSAGE_SIZE 256
 #define CRLF "\r\n"
 #define SP " "
 char HTTP[] = "http://";
@@ -13,13 +14,15 @@ char HTTPS[] = "https://";
 char METHOD[] = "GET";
 #define METHOD_LEN 3
 char HTTP_VERSION[] = "HTTP/1.1";
-#define HTTP_VERSION_LEN 8
+#define HTTP_VERSION_LEN 8 // TODO może użyć strlen
 char HOST[] = "Host";
 char CONNECTION[] = "Connection";
 char CLOSE[] = "close";
-char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
 char COOKIE[] = "Cookie";
 char COOKIE_VERSION[] = "$Version=0;";
+char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
+char TRANSFER_ENCODING[] = "Transfer-Encoding";
+char CONTENT_LENGTH[] = "Content-Length";
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -29,6 +32,7 @@ int initialize_http_message(http_message *message) {
   
   message->length = 0;
   message->capacity = INITIAL_MESSAGE_SIZE;
+  memset(message->message, 0, message->capacity);
 
   return 0;
 } 
@@ -115,6 +119,8 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   }
   free(cookie_buffer);
 
+  // Content-length
+
   // Set connection close 
   if (add_header(message, (char*)&CONNECTION, (char*)&CLOSE) != 0) {
     return -1;
@@ -132,7 +138,134 @@ int add_header(http_message *message, char *header_name, char *value) {
   if (append(message, value, strlen(value)) != 0) return -1;
   if (append(message, CRLF, strlen(CRLF)) != 0) return -1;
 
+  // Użyć sprintf
+
   return 0;
+}
+
+// Read header line until CRLF
+// Buffer should be freed afterwards by caller
+// Returns -1 on failrue or length of header on success
+int get_header(char **buffer, FILE *file) {
+  http_message header;
+  initialize_http_message(&header);
+  
+  int res = 0;
+  char *part_buffer = NULL;
+  size_t part_buffer_len = 0;
+    
+  do {
+    res = getline(&part_buffer, &part_buffer_len, file);
+    if (res == -1) {
+      // TODO free
+      return -1;
+    }
+     
+    append(&header, part_buffer, res);
+  } while (memcmp((header.message + header.length - 2), CRLF, 3) != 0);
+  
+  free(part_buffer);
+  *buffer = header.message;
+  return header.length;
+}
+
+parsed_http_response parse_message(int fd) {
+  parsed_http_response response;
+  initialize_http_message(&response.cookies);
+  response.content_length = 0;
+  response.real_body_length = 0;
+  response.chunked = 0;
+  response.failed = 1;
+
+  FILE *http_response = fdopen(fd, "r");
+  if (http_response == NULL) {
+    return response;
+  }
+
+  // Parse headers
+  char *current_line = NULL;
+  size_t current_line_len = 0;
+  char *next_line = NULL;
+  size_t next_line_len = 0;
+
+  int res = get_header(&next_line, http_response);
+  if (res == -1) {
+    return response;  
+  }
+
+  int status_line = 1;
+
+  do {
+    free(current_line);
+    current_line = next_line;
+    next_line = NULL;
+    next_line_len = 0;
+
+    res = get_header(&next_line, http_response);
+    if (res == -1) {
+      return response;  
+    }
+
+    // Process current line
+    // TODO obs-fold: zrobić tak, żeby w next-line znajdował się cały header
+  
+    if (status_line) { // Parse status line
+      if (memcmp(current_line, HTTP_VERSION, HTTP_VERSION_LEN) != 0) {
+        return response;
+      }
+
+      if (current_line[8] != ' ') return response;
+
+      // Check if status code is correct
+      if (current_line[9] > '9' || current_line[9] < '0') return response;
+      if (current_line[10] > '9' || current_line[10] < '0') return response;
+      if (current_line[11] > '9' || current_line[11] < '0') return response;
+
+      if (current_line[12] != ' ') return response;
+
+      char *status_code = current_line + 9; 
+      *(status_code + 3) = 0;
+
+      response.status_code = atoi(status_code);
+
+      if (response.status_code != 200) {
+        response.failed = 0;
+        return response;
+      }
+
+      status_line = 0;
+    } else { // Parse headers
+      char *field_name = current_line;
+      char *field_value = memchr(current_line, ':', res) + 1; 
+
+      if (field_value == NULL) {
+        return response;
+      }
+
+      size_t field_name_len = field_value - field_name;
+      size_t field_value_len = res - field_name_len;
+      
+      // check field name
+      if (memcmp(CONTENT_LENGTH, field_name, field_name_len) == 0) {
+        // parse content-length
+        printf("content_lengt %s\n", field_value);
+      } else if (memcmp(TRANSFER_ENCODING, field_name, field_name_len) == 0) {
+        printf("transfer-encoding %s\n", field_value);
+      } else if (memcmp(SET_COOKIE, field_name, field_name_len) == 0) {
+        printf("set-cookie %s\n", field_value);
+      } else {
+        // dont care
+      }
+    }
+
+  } while (memcmp(CRLF, next_line, 3) != 0);
+
+  if (fclose(http_response) != 0) {
+    return response;  
+  }
+
+  response.failed = 0;
+  return response;
 }
 
 // TODO czy ta funkcja potrzebna?
