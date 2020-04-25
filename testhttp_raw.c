@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
   }
   
   if (response.status_code != 200) {
-    printf("%s", response.status_line);
+    printf("%s\n", response.status_line);
     return 0;
   }
   
