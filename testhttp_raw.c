@@ -26,9 +26,21 @@ int main(int argc, char *argv[]) {
   char *buffer = malloc(sizeof(char) * 1000);
 
   // TODO read in loop
-  read(socket, buffer, 1000);
+//  read(socket, buffer, 1000);
 
-  printf("%s", buffer);
+  parsed_http_response response = parse_message(socket);
+
+  if (response.failed) {
+    fatal("Incorrect http response");
+  }
+  
+  if (response.status_code != 200) {
+    printf("%s", response.status_line);
+    return 0;
+  }
+  
+  printf("%s", response.cookies.message);
+  printf("Dlugosc zasobu: %ld\n", response.real_body_length);
 
   return 0;
 }
