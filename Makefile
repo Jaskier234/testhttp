@@ -1,7 +1,7 @@
 TARGET: testhttp_raw test
 
 CC=gcc
-CFLAGS=-O2
+CFLAGS=
 DEPS=err.h connect.h http.h
 OBJ=err.o connect.o http.o
 
