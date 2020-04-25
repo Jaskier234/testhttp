@@ -172,6 +172,7 @@ int get_header(char **buffer, FILE *file) {
 }
 
 parsed_http_response parse_message(int fd) {
+  // TODO cleaner way to initialize
   parsed_http_response response;
   initialize_http_message(&response.cookies);
   response.content_length = -1;
@@ -212,6 +213,11 @@ parsed_http_response parse_message(int fd) {
 
     // Process current line
     // TODO obs-fold: zrobić tak, żeby w next-line znajdował się cały header
+
+    // Remove CRLF from the end
+    *(current_line + current_line_len - 1) = 0;
+    *(current_line + current_line_len - 2) = 0;
+    current_line_len -= 2;
   
     if (status_line) { // Parse status line
       // Check http version
@@ -232,6 +238,7 @@ parsed_http_response parse_message(int fd) {
 
       response.status_code = strtol(status_code, NULL, 10);
       if (response.status_code < 100 || response.status_code >= 1000) return response;
+
       response.status_line = current_line;
 
       if (response.status_code != 200) {
