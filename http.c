@@ -177,7 +177,7 @@ parsed_http_response parse_message(int fd) {
   initialize_http_message(&response.cookies);
   response.content_length = -1;
   response.real_body_length = 0;
-  response.chunked = 0;
+  response.transfer_encoding = -1; // -1 none. 1 chunked. 0 other
   response.failed = 1; // Failed initially is set to true so response is considered
                        // incorrect until the end of the function.
 
@@ -190,10 +190,9 @@ parsed_http_response parse_message(int fd) {
   char *current_line = NULL;
   size_t current_line_len = 0;
   char *next_line = NULL;
-  size_t next_line_len = 0;
+  size_t next_line_len = get_header(&next_line, http_response);
 
-  int res = get_header(&next_line, http_response);
-  if (res == -1) {
+  if (next_line_len == -1) {
     return response;  
   }
 
@@ -204,10 +203,9 @@ parsed_http_response parse_message(int fd) {
     current_line = next_line;
     current_line_len = next_line_len;
     next_line = NULL;
-    next_line_len = 0;
+    next_line_len = get_header(&next_line, http_response);
 
-    res = get_header(&next_line, http_response);
-    if (res == -1) {
+    if (next_line_len == -1) {
       return response;  
     }
 
@@ -258,7 +256,7 @@ parsed_http_response parse_message(int fd) {
       char *field_value = colon_pos + 1;
 
       size_t field_name_len = field_value - field_name - 1;
-      size_t field_value_len = res - field_name_len;
+      size_t field_value_len = current_line_len - field_name_len - 1;
       
       // skip trailing whitespaces
       char *it = field_value + field_value_len - 1;
@@ -304,7 +302,13 @@ parsed_http_response parse_message(int fd) {
       } else if (memcmp(TRANSFER_ENCODING, field_name, field_name_len) == 0) {
         printf("transfer-encoding %s\n", field_value);
       } else if (memcmp(SET_COOKIE, field_name, field_name_len) == 0) {
-        printf("set-cookie %s\n", field_value);
+        char *delim = memchr(field_value, ';', field_value_len);
+        if (delim != NULL) {
+          *delim = 0;
+          field_value_len = delim - field_value;
+        }
+        if (append(&response.cookies, field_value, field_value_len) != 0) return response;
+        if (append(&response.cookies, "\n", 1) != 0) return response;
       } else {
         // dont care
       }
@@ -314,6 +318,10 @@ parsed_http_response parse_message(int fd) {
 
   if (fclose(http_response) != 0) {
     return response;  
+  }
+
+  if (response.transfer_encoding == -1) {
+    response.real_body_length = response.content_length;
   }
 
   response.failed = 0;
