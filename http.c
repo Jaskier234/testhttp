@@ -177,7 +177,8 @@ parsed_http_response parse_message(int fd) {
   response.content_length = -1;
   response.real_body_length = 0;
   response.chunked = 0;
-  response.failed = 1;
+  response.failed = 1; // Failed initially is set to true so response is considered
+                       // incorrect until the end of the function.
 
   FILE *http_response = fdopen(fd, "r");
   if (http_response == NULL) {
@@ -213,23 +214,25 @@ parsed_http_response parse_message(int fd) {
     // TODO obs-fold: zrobić tak, żeby w next-line znajdował się cały header
   
     if (status_line) { // Parse status line
+      // Check http version
       if (memcmp(current_line, HTTP_VERSION, HTTP_VERSION_LEN) != 0) {
         return response;
       }
 
-      if (current_line[8] != ' ') return response;
+      if (current_line[8] != SP) return response;
 
       // Check if status code is correct
       if (current_line[9] > '9' || current_line[9] < '0') return response;
       if (current_line[10] > '9' || current_line[10] < '0') return response;
       if (current_line[11] > '9' || current_line[11] < '0') return response;
 
-      if (current_line[12] != ' ') return response;
+      if (current_line[12] != SP) return response;
 
       char *status_code = current_line + 9; 
-      *(status_code + 3) = 0;
 
-      response.status_code = atoi(status_code);
+      response.status_code = strtol(status_code, NULL, 10);
+      if (response.status_code < 100 || response.status_code >= 1000) return response;
+      response.status_line = current_line;
 
       if (response.status_code != 200) {
         response.failed = 0;

@@ -15,6 +15,7 @@ typedef struct {
   size_t real_body_length;
   int chunked;
   int status_code;
+  char *status_line;
   int failed;
 } parsed_http_response;
 
