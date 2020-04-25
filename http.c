@@ -3,10 +3,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <limits.h>
 
 #define INITIAL_MESSAGE_SIZE 256
 #define CRLF "\r\n"
-#define SP " "
+#define SP ' '
+#define HTAB 9
 char HTTP[] = "http://";
 #define HTTP_LEN 7
 char HTTPS[] = "https://";
@@ -172,7 +174,7 @@ int get_header(char **buffer, FILE *file) {
 parsed_http_response parse_message(int fd) {
   parsed_http_response response;
   initialize_http_message(&response.cookies);
-  response.content_length = 0;
+  response.content_length = -1;
   response.real_body_length = 0;
   response.chunked = 0;
   response.failed = 1;
@@ -198,6 +200,7 @@ parsed_http_response parse_message(int fd) {
   do {
     free(current_line);
     current_line = next_line;
+    current_line_len = next_line_len;
     next_line = NULL;
     next_line_len = 0;
 
@@ -235,20 +238,59 @@ parsed_http_response parse_message(int fd) {
 
       status_line = 0;
     } else { // Parse headers
+      // Split header into name and value
       char *field_name = current_line;
-      char *field_value = memchr(current_line, ':', res) + 1; 
 
-      if (field_value == NULL) {
+      char *colon_pos = memchr(current_line, ':', current_line_len); 
+      if (colon_pos == NULL) {
         return response;
       }
+      char *field_value = colon_pos + 1;
 
-      size_t field_name_len = field_value - field_name;
+      size_t field_name_len = field_value - field_name - 1;
       size_t field_value_len = res - field_name_len;
+      
+      // skip trailing whitespaces
+      char *it = field_value + field_value_len - 1;
+      while (it >= field_value && (*it == SP || *it == HTAB)) {
+        *it = 0;
+        it--;
+        field_value_len--;
+      }
+
+      // skip leading whitespaces
+      while (*field_value == SP || *field_value == HTAB) {
+         field_value_len--; 
+         field_value++;
+      }
       
       // check field name
       if (memcmp(CONTENT_LENGTH, field_name, field_name_len) == 0) {
         // parse content-length
-        printf("content_lengt %s\n", field_value);
+        if (*field_value == '"')  {
+          if (*(field_value + field_value_len - 1) == '"') {
+            *(field_value + field_value_len - 1) = 0;
+            field_value++;
+            field_value_len -= 2;
+          } else {
+            // incorrect quoting
+            return response;
+          }
+        }
+
+        char *endptr = NULL;
+        int content_length = strtol(field_value, &endptr, 10);
+        if ((content_length == 0 && *endptr != 0) 
+            || content_length == LONG_MAX 
+            || content_length == LONG_MIN) {
+          return response;
+        }
+
+        if (response.content_length == -1) {
+          response.content_length = content_length;
+        } else if (response.content_length != content_length) {
+          response.content_length = -2; // Content-Length field is incorrect
+        }
       } else if (memcmp(TRANSFER_ENCODING, field_name, field_name_len) == 0) {
         printf("transfer-encoding %s\n", field_value);
       } else if (memcmp(SET_COOKIE, field_name, field_name_len) == 0) {
