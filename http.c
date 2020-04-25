@@ -25,6 +25,7 @@ char COOKIE_VERSION[] = "$Version=0;";
 char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
 char TRANSFER_ENCODING[] = "Transfer-Encoding";
 char CONTENT_LENGTH[] = "Content-Length";
+char CHUNKED[] = "chunked"; // TODO make this case insensitive
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -300,7 +301,33 @@ parsed_http_response parse_message(int fd) {
           response.content_length = -2; // Content-Length field is incorrect
         }
       } else if (memcmp(TRANSFER_ENCODING, field_name, field_name_len) == 0) {
-        printf("transfer-encoding %s\n", field_value);
+        if (response.transfer_encoding == -1) {
+          response.transfer_encoding = 0;
+        }
+
+        int cmp_res;
+        while ((cmp_res = memcmp(field_value, CHUNKED, strlen(CHUNKED))) != 0) {
+          // find delimiter (',')
+          char *delim = memchr(field_value, ',', field_value_len);
+          if (delim == NULL) {
+            break;
+          }
+          // move field_value beggining one char after delimiter
+          delim++;
+          field_value_len -= delim - field_value;
+          field_value = delim;
+
+          // skip whitespaces after delimiter
+          while(*field_value == SP || *field_value == HTAB) {
+            field_value++;
+            field_value_len--;
+          }
+        } 
+
+        if (cmp_res == 0) {
+          response.transfer_encoding = 1; // transfer-encoding: chunked
+        }
+  
       } else if (memcmp(SET_COOKIE, field_name, field_name_len) == 0) {
         char *delim = memchr(field_value, ';', field_value_len);
         if (delim != NULL) {
@@ -320,8 +347,15 @@ parsed_http_response parse_message(int fd) {
     return response;  
   }
 
-  if (response.transfer_encoding == -1) {
+  if (response.transfer_encoding == 1) {
+    // Chunked
+  } else if (response.transfer_encoding == 0) {
+    // other encoding. Read till close
+  } else if (response.content_length != -1) {
+    // correct content length. Read it
     response.real_body_length = response.content_length;
+  } else {
+    // none of above. Read till close
   }
 
   response.failed = 0;
