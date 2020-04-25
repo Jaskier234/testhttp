@@ -172,6 +172,15 @@ int get_header(char **buffer, FILE *file) {
   return header.length;
 }
 
+// Read chunked message body. Returns message length or -1 if error occured
+int read_chunked(FILE *conn) {
+  char *chunk_size = NULL;
+  size_t chunk_size_len = 0;
+  int res = getline(&chunk_size, chunk_size_len, conn);
+
+  if (res == -1) return -1;
+}
+
 parsed_http_response parse_message(int fd) {
   // TODO cleaner way to initialize
   parsed_http_response response;
