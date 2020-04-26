@@ -279,7 +279,6 @@ size_t read_chunked(FILE *conn) {
   int res;
 
   do {
-//    res = getline(&chunk_size_buff, &chunk_size_buff_len, conn);
     res = get_line(&chunk_size_buff, conn);
     if (res == -1) return -1;
     
@@ -290,7 +289,6 @@ size_t read_chunked(FILE *conn) {
       break;
     }
 
-//    res = getline(&chunk_data, &chunk_data_len, conn);
     res = get_line(&chunk_data, conn);
     if (res == -1) return -1;
 
@@ -477,13 +475,19 @@ parsed_http_response parse_message(int fd) {
     // Chunked
     response.real_body_length = read_chunked(http_response);
 
-  } else if (response.transfer_encoding == 0) {
-    // other encoding. Read till close
-  } else if (response.content_length != -1) {
-    // correct content length. Read it
-    response.real_body_length = response.content_length;
   } else {
-    // none of above. Read till close
+    // Read till close
+
+    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
+
+    int res;
+
+    do {
+      res = fread(buffer, sizeof(char), BUFFER_SIZE, http_response);
+      response.real_body_length += res;
+    } while (res == BUFFER_SIZE);
+
+//    if (/*check stream error*/) {}
   }
 
   if (fclose(http_response) != 0) {
