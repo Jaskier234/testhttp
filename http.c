@@ -1,4 +1,5 @@
 #include "http.h"
+#include "err.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -6,7 +7,10 @@
 #include <limits.h>
 
 #define INITIAL_MESSAGE_SIZE 256
+#define BUFFER_SIZE (1<<13) // ~8kb
 #define CRLF "\r\n"
+#define CR '\r'
+#define LF '\n'
 #define SP ' '
 #define HTAB 9
 char HTTP[] = "http://";
@@ -146,6 +150,97 @@ int add_header(http_message *message, char *header_name, char *value) {
   return 0;
 }
 
+// Returns pointer to first LF character which is preceded by CR character 
+// or NULL if there is no such character inside limit.
+// prev_char is character at index -1. So if string[0] == LF and prev_char == CR.
+// string is returned.
+char *seek_crlf(char *string, size_t limit, char prev_char) {
+  char *begin = string;
+
+  if (*string == LF && prev_char == CR)
+    return string;
+
+  string++;
+  for (; string - begin < limit; string++) {
+    if (*string == LF && *(string - 1) == CR)
+      return string;
+  }
+
+  return NULL;
+}
+
+// Read from the socket until CRLF into allocated buffer and save this buffer 
+// into *line. If line is NULL data is ignored. If this function is called with
+// different file pointer before end of current file error is returned.
+// Returns -1 on error or length of line otherwise.
+int get_line(char **line, FILE *file) { 
+  static char *buffer = NULL;
+  static char *buff_ptr = NULL; // Points to first non-processed byte 
+  static FILE *current_file = NULL;
+  char last_char; // last character in previous buffer
+
+  if (buffer == NULL) { // new FILE*
+    buffer = malloc(sizeof(char) * BUFFER_SIZE);
+    current_file = file;
+    buff_ptr = buffer + BUFFER_SIZE;
+  }
+
+  if (current_file != file) // get_line called with new file before eof
+    return -1;
+    
+  http_message result;
+  initialize_http_message(&result);
+
+  int crlf = 0;
+  int eof = 0;
+  int buffer_size = BUFFER_SIZE; // Most of the times buffer_size == BUFFER_SIZE, 
+                                 // but at the end of file buffer_size is smaller
+
+  do { 
+    // Character before buff_ptr. If buff_ptr == buffer this is last character
+    // in previous buffer
+    char prev_char = ((buff_ptr == buffer)?last_char:*(buff_ptr - 1)); 
+    // search from buff_ptr to the end of buffer
+    char *newline = seek_crlf(buff_ptr, buffer_size - (buff_ptr - buffer), prev_char); 
+
+    if (newline != NULL) { 
+      crlf = 1; // CRLF found
+      newline++; // Put newline pointer after LF character
+    } else {
+      newline = buffer + buffer_size;
+    }
+
+    // append current buffer to result.
+    if (append(&result, buff_ptr, newline - buff_ptr) == -1) return -1;
+
+    buff_ptr = newline;
+
+    if (crlf == 0 && eof == 0) { // No new line found. Have to read more data
+      
+      last_char = *(buffer + buffer_size - 1);
+
+      // read new buffer
+      int res = fread(buffer, sizeof(char), BUFFER_SIZE, current_file);
+      buff_ptr = buffer; // reset buff_ptr to the beginning of the buffer
+      if (res < BUFFER_SIZE) {
+        if (feof(current_file)) {
+          eof = 1;
+        } else {
+          return -1; // error in fread occured
+        }
+      }
+    }
+  } while (crlf == 0);
+
+  if (eof) {
+    //reset
+  }
+
+  *line = result.message;
+
+  return result.length;
+}
+
 // Read header line until CRLF
 // Buffer should be freed afterwards by caller
 // Returns -1 on failrue or length of header on success
@@ -173,12 +268,38 @@ int get_header(char **buffer, FILE *file) {
 }
 
 // Read chunked message body. Returns message length or -1 if error occured
-int read_chunked(FILE *conn) {
-  char *chunk_size = NULL;
-  size_t chunk_size_len = 0;
-  int res = getline(&chunk_size, chunk_size_len, conn);
+size_t read_chunked(FILE *conn) {
+  char *chunk_size_buff = NULL;
+  size_t chunk_size_buff_len = 0;
+  size_t chunk_size = 0;
+  size_t total_size = 0;
+  char *chunk_data = NULL;
+  size_t chunk_data_len = 0;
 
-  if (res == -1) return -1;
+  int res;
+
+  do {
+//    res = getline(&chunk_size_buff, &chunk_size_buff_len, conn);
+    res = get_line(&chunk_size_buff, conn);
+    if (res == -1) return -1;
+    
+    chunk_size = strtol(chunk_size_buff, NULL, 16);
+    total_size += chunk_size;
+
+    if (chunk_size == 0) {
+      break;
+    }
+
+//    res = getline(&chunk_data, &chunk_data_len, conn);
+    res = get_line(&chunk_data, conn);
+    if (res == -1) return -1;
+
+  } while (chunk_size > 0);
+
+  free(chunk_size_buff);
+  free(chunk_data);
+
+  return total_size;
 }
 
 parsed_http_response parse_message(int fd) {
@@ -352,12 +473,10 @@ parsed_http_response parse_message(int fd) {
 
   } while (memcmp(CRLF, next_line, 3) != 0);
 
-  if (fclose(http_response) != 0) {
-    return response;  
-  }
-
   if (response.transfer_encoding == 1) {
     // Chunked
+    response.real_body_length = read_chunked(http_response);
+
   } else if (response.transfer_encoding == 0) {
     // other encoding. Read till close
   } else if (response.content_length != -1) {
@@ -365,6 +484,10 @@ parsed_http_response parse_message(int fd) {
     response.real_body_length = response.content_length;
   } else {
     // none of above. Read till close
+  }
+
+  if (fclose(http_response) != 0) {
+    return response;  
   }
 
   response.failed = 0;
