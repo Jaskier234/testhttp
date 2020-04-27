@@ -336,7 +336,7 @@ void strtolower(char *string) {
   }
 }
 
-parsed_http_response parse_message(int fd) {
+parsed_http_response parse_message(FILE *http_response) {
   // TODO cleaner way to initialize
   parsed_http_response response;
   initialize_http_message(&response.cookies);
@@ -346,10 +346,10 @@ parsed_http_response parse_message(int fd) {
   response.failed = 1; // Failed initially is set to true so response is considered
                        // incorrect until the end of the function.
 
-  FILE *http_response = fdopen(fd, "r");
-  if (http_response == NULL) {
-    return response;
-  }
+//  FILE *http_response = fdopen(fd, "r");
+//  if (http_response == NULL) {
+//    return response;
+//  }
 
   // Parse headers
   char *current_line = NULL;

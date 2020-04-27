@@ -1,6 +1,7 @@
 /* Set of functions for constructing and parsing http messages */
 
 #include <stddef.h>
+#include <stdio.h>
 
 // Represents http message
 typedef struct {
@@ -41,7 +42,4 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
 int add_header(http_message* message, char* header, char *value);
 
 // Parse http response.
-parsed_http_response parse_message(int fd);
-
-// Add CRLF at the end of the message
-void end_message(http_message *message);
+parsed_http_response parse_message(FILE *conn);

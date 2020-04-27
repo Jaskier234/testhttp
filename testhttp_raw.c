@@ -21,9 +21,14 @@ int main(int argc, char *argv[]) {
 
   int socket = make_connection(argv[1]);
 
-  write(socket, request.message, request.length);
+  FILE *connection = fdopen(socket, "r+");
+  if (connection == NULL) {
+    fatal("connection failed"); 
+  }
 
-  parsed_http_response response = parse_message(socket);
+  fwrite(request.message, sizeof(char), request.length, connection);
+
+  parsed_http_response response = parse_message(connection);
 
   if (response.failed) {
     fatal("Incorrect http response");
