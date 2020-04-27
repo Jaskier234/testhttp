@@ -26,7 +26,6 @@ char HOST[] = "Host";
 char CONNECTION[] = "Connection";
 char CLOSE[] = "close";
 char COOKIE[] = "Cookie";
-char COOKIE_VERSION[] = "$Version=0;";
 char SET_COOKIE[] = "set-cookie"; // TODO sprawdzić literówki
 char TRANSFER_ENCODING[] = "transfer-encoding";
 char CONTENT_LENGTH[] = "content-length";
@@ -63,11 +62,12 @@ int extend_message_capacity(http_message *message, size_t new_capacity) {
 
 int append(http_message *message, char * const string, size_t size) {
   // +4 for buffer
-  if(extend_message_capacity(message, message->length + size + 4) != 0)
+  if (extend_message_capacity(message, message->length + size + 4) != 0)
     return -1;
 
   memcpy(message->message + message->length, string, size);
   message->length += size;
+  *(message->message + message->length) = 0; // Make sure that message->message is null-terminated
   
   return 0;
 }
@@ -84,6 +84,10 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
 
   char *host = target_url;
   target_url = strchr(target_url, '/');
+
+  if (target_url == NULL) {
+    // TODO
+  }
   
   if (append(message, METHOD, strlen(METHOD)) != 0) return -1; 
   if (append(message, " ", 1) != 0) return -1; 
@@ -114,18 +118,21 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   while ((res = getline(&cookie_buffer, &cookie_buffer_len, cookies)) != -1) {
     char *newline = strchr(cookie_buffer, '\n');
     if (newline != NULL) {
-      *newline = 0;
+      *newline = 0; // Remove new line character
     }
-    cookie_value.length = 0;
 
-    if (append(&cookie_value, (char*)&COOKIE_VERSION, strlen((char*)&COOKIE_VERSION)) != 0) return -1; 
     if (append(&cookie_value, cookie_buffer, strlen(cookie_buffer)) != 0) return -1; 
+    if (append(&cookie_value, ";", 1) != 0) return -1; 
+  }
 
+  if (cookie_value.length > 0) { // Cookie file is non-empty
     if (add_header(message, (char*)&COOKIE, cookie_value.message) != 0) {
       return -1;
     }
   }
+
   free(cookie_buffer);
+  free(cookie_value.message);
 
   // Content-length
 
