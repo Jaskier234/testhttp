@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define STATUS_CODE_OK 200
+
 // Represents http message
 typedef struct {
   char *message;

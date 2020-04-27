@@ -34,13 +34,21 @@ int main(int argc, char *argv[]) {
     fatal("Incorrect http response");
   }
   
-  if (response.status_code != 200) {
+  if (response.status_code != STATUS_CODE_OK) {
     printf("%s\n", response.status_line);
     return 0;
   }
   
   printf("%s", response.cookies.message);
   printf("Dlugosc zasobu: %ld\n", response.real_body_length);
+
+  if (fclose(connection) != 0) {
+    syserr("close connection");
+  }
+
+  if (close(socket) != 0) {
+    syserr("close socekt");
+  }
 
   return 0;
 }

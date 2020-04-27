@@ -32,6 +32,7 @@ char TRANSFER_ENCODING[] = "transfer-encoding";
 char CONTENT_LENGTH[] = "content-length";
 char CHUNKED[] = "chunked";
 char ZERO[] = "0";
+char CORRECT_STATUS_LINE[] = "HTTP/1.1 200";
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -188,78 +189,6 @@ char *seek_crlf(char *string, int limit, char prev_char) {
   return NULL;
 }
 
-//// Read from the socket until CRLF into allocated buffer and save this buffer 
-//// into *line. If line is NULL data is ignored. If this function is called with
-//// different file pointer before end of current file error is returned.
-//// Returns -1 on error or length of line otherwise.
-//int get_line(char **line, FILE *file) { 
-//  static char *buffer = NULL;
-//  static char *buff_ptr = NULL; // Points to first non-processed byte 
-//  static FILE *current_file = NULL;
-//  char last_char; // last character in previous buffer
-//
-//  if (buffer == NULL) { // new FILE*
-//    buffer = malloc(sizeof(char) * BUFFER_SIZE);
-//    current_file = file;
-//    buff_ptr = buffer + BUFFER_SIZE;
-//  }
-//
-//  if (current_file != file) // get_line called with new file before eof
-//    return -1;
-//    
-//  http_message result;
-//  initialize_http_message(&result);
-//
-//  int crlf = 0;
-//  int eof = 0;
-//  int buffer_size = BUFFER_SIZE; // Most of the times buffer_size == BUFFER_SIZE, 
-//                                 // but at the end of file buffer_size is smaller
-//
-//  do { 
-//    // Character before buff_ptr. If buff_ptr == buffer this is last character
-//    // in previous buffer
-//    char prev_char = ((buff_ptr == buffer)?last_char:*(buff_ptr - 1)); 
-//    // search from buff_ptr to the end of buffer
-//    char *newline = seek_crlf(buff_ptr, buffer_size - (buff_ptr - buffer), prev_char); 
-//
-//    if (newline != NULL) { 
-//      crlf = 1; // CRLF found
-//      newline++; // Put newline pointer after LF character
-//    } else {
-//      newline = buffer + buffer_size;
-//    }
-//
-//    // append current buffer to result.
-//    if (append(&result, buff_ptr, newline - buff_ptr) == -1) return -1;
-//
-//    buff_ptr = newline;
-//
-//    if (crlf == 0 && eof == 0) { // No new line found. Have to read more data
-//      
-//      last_char = *(buffer + buffer_size - 1);
-//
-//      // read new buffer
-//      int res = fread(buffer, sizeof(char), BUFFER_SIZE, current_file);
-//      buff_ptr = buffer; // reset buff_ptr to the beginning of the buffer
-//      if (res < BUFFER_SIZE) {
-//        if (feof(current_file)) {
-//          eof = 1;
-//        } else {
-//          return -1; // error in fread occured
-//        }
-//      }
-//    }
-//  } while (crlf == 0);
-//
-//  if (eof) {
-//    // TODO reset
-//  }
-//
-//  *line = result.message;
-//
-//  return result.length;
-//}
-
 // Read header line until CRLF
 // Buffer should be freed afterwards by caller
 // Returns -1 on failrue or length of header on success
@@ -341,15 +270,11 @@ parsed_http_response parse_message(FILE *http_response) {
   parsed_http_response response;
   initialize_http_message(&response.cookies);
   response.content_length = -1;
+  response.status_code = -1;
   response.real_body_length = 0;
   response.chunked = 0; // -1 none. 1 chunked. 0 other
   response.failed = 1; // Failed initially is set to true so response is considered
                        // incorrect until the end of the function.
-
-//  FILE *http_response = fdopen(fd, "r");
-//  if (http_response == NULL) {
-//    return response;
-//  }
 
   // Parse headers
   char *current_line = NULL;
@@ -384,30 +309,14 @@ parsed_http_response parse_message(FILE *http_response) {
   
     if (status_line) { // Parse status line
       // Check http version
-      if (memcmp(current_line, HTTP_VERSION, HTTP_VERSION_LEN) != 0) {
-        return response;
-      }
-
-      if (current_line[8] != SP) return response;
-
-      // Check if status code is correct
-      if (current_line[9] > '9' || current_line[9] < '0') return response;
-      if (current_line[10] > '9' || current_line[10] < '0') return response;
-      if (current_line[11] > '9' || current_line[11] < '0') return response;
-
-      if (current_line[12] != SP) return response;
-
-      char *status_code = current_line + 9; 
-
-      response.status_code = strtol(status_code, NULL, 10);
-      if (response.status_code < 100 || response.status_code >= 1000) return response;
-
       response.status_line = current_line;
 
-      if (response.status_code != 200) {
+      if (memcmp(current_line, &CORRECT_STATUS_LINE, strlen((char*)&CORRECT_STATUS_LINE)) != 0) {
         response.failed = 0;
         return response;
-      }
+      } else {
+        response.status_code = STATUS_CODE_OK;
+      } 
 
       status_line = 0;
     } else { // Parse headers
@@ -444,17 +353,6 @@ parsed_http_response parse_message(FILE *http_response) {
       // check field name
       if (memcmp(CONTENT_LENGTH, field_name, field_name_len) == 0) {
         // parse content-length
-        if (*field_value == '"')  {
-          if (*(field_value + field_value_len - 1) == '"') {
-            *(field_value + field_value_len - 1) = 0;
-            field_value++;
-            field_value_len -= 2;
-          } else {
-            // incorrect quoting
-            return response;
-          }
-        }
-
         char *endptr = NULL;
         long int content_length = strtol(field_value, &endptr, 10);
         if ((content_length == 0 && *endptr != 0) 
@@ -483,8 +381,6 @@ parsed_http_response parse_message(FILE *http_response) {
         }
         if (append(&response.cookies, field_value, field_value_len) != 0) return response;
         if (append(&response.cookies, "\n", 1) != 0) return response;
-      } else {
-        // dont care
       }
     }
 
@@ -493,12 +389,9 @@ parsed_http_response parse_message(FILE *http_response) {
   if (response.chunked == 1) {
     // Chunked
     response.real_body_length = read_chunked(http_response);
-
   } else {
-    // Read till close
-
+    // Read until close
     char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
-
     int res;
 
     do {
@@ -506,11 +399,9 @@ parsed_http_response parse_message(FILE *http_response) {
       response.real_body_length += res;
     } while (res == BUFFER_SIZE);
 
-// TODO    if (/*check stream error*/) {}
-  }
-
-  if (fclose(http_response) != 0) {
-    return response;  
+    if (ferror(http_response)) {
+      return response;  
+    }
   }
 
   response.failed = 0;
