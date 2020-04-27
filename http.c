@@ -21,15 +21,17 @@ char HTTPS[] = "https://";
 char METHOD[] = "GET";
 #define METHOD_LEN 3
 char HTTP_VERSION[] = "HTTP/1.1";
-#define HTTP_VERSION_LEN 8 // TODO może użyć strlen
+#define HTTP_VERSION_LEN 8
 char HOST[] = "Host";
 char CONNECTION[] = "Connection";
 char CLOSE[] = "close";
 char COOKIE[] = "Cookie";
-char SET_COOKIE[] = "set-cookie"; // TODO sprawdzić literówki
+char DEFAULT_REQUEST_TARGET[] = "/";
+char SET_COOKIE[] = "set-cookie";
 char TRANSFER_ENCODING[] = "transfer-encoding";
 char CONTENT_LENGTH[] = "content-length";
-char CHUNKED[] = "chunked"; // TODO make this case insensitive
+char CHUNKED[] = "chunked";
+char ZERO[] = "0";
 
 int initialize_http_message(http_message *message) {
   message->message = malloc(sizeof(char) * INITIAL_MESSAGE_SIZE);
@@ -85,18 +87,24 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   char *host = target_url;
   target_url = strchr(target_url, '/');
 
+  char *request_target;
+
   if (target_url == NULL) {
-    // TODO
+    request_target = malloc(sizeof(char) * 4);
+    strcpy(request_target, DEFAULT_REQUEST_TARGET);
+  } else {
+    request_target = malloc(sizeof(char) * (strlen(target_url) + 4));
+    strcpy(request_target, target_url);
+    *target_url = 0; // set first byte of target url to 0 so that host is null-terminated
   }
   
   if (append(message, METHOD, strlen(METHOD)) != 0) return -1; 
   if (append(message, " ", 1) != 0) return -1; 
-  if (append(message, target_url, strlen(target_url)) != 0) return -1; 
+  if (append(message, request_target, strlen(request_target)) != 0) return -1; 
   if (append(message, " ", 1) != 0) return -1; 
   if (append(message, HTTP_VERSION, strlen(HTTP_VERSION)) != 0) return -1; 
   if (append(message, CRLF, strlen(CRLF)) != 0) return -1; 
 
-  *target_url = 0; // set first byte of target url to 0 so that host contains correct address.
 
   if (add_header(message, (char*)&HOST, host) != 0) {
     return -1;
@@ -135,6 +143,9 @@ int generate_request(http_message *message, char *target_url, char *cookie_file)
   free(cookie_value.message);
 
   // Content-length
+  if (add_header(message, (char*)&CONTENT_LENGTH, ZERO) != 0) {
+    return -1;
+  }
 
   // Set connection close 
   if (add_header(message, (char*)&CONNECTION, (char*)&CLOSE) != 0) {
