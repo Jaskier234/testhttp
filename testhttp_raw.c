@@ -23,11 +23,6 @@ int main(int argc, char *argv[]) {
 
   write(socket, request.message, request.length);
 
-  char *buffer = malloc(sizeof(char) * 1000);
-
-  // TODO read in loop
-//  read(socket, buffer, 1000);
-
   parsed_http_response response = parse_message(socket);
 
   if (response.failed) {

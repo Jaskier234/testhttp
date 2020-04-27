@@ -173,7 +173,7 @@ int add_header(http_message *message, char *header_name, char *value) {
 // or NULL if there is no such character inside limit.
 // prev_char is character at index -1. So if string[0] == LF and prev_char == CR.
 // string is returned.
-char *seek_crlf(char *string, size_t limit, char prev_char) {
+char *seek_crlf(char *string, int limit, char prev_char) {
   char *begin = string;
 
   if (*string == LF && prev_char == CR)
@@ -188,77 +188,77 @@ char *seek_crlf(char *string, size_t limit, char prev_char) {
   return NULL;
 }
 
-// Read from the socket until CRLF into allocated buffer and save this buffer 
-// into *line. If line is NULL data is ignored. If this function is called with
-// different file pointer before end of current file error is returned.
-// Returns -1 on error or length of line otherwise.
-int get_line(char **line, FILE *file) { 
-  static char *buffer = NULL;
-  static char *buff_ptr = NULL; // Points to first non-processed byte 
-  static FILE *current_file = NULL;
-  char last_char; // last character in previous buffer
-
-  if (buffer == NULL) { // new FILE*
-    buffer = malloc(sizeof(char) * BUFFER_SIZE);
-    current_file = file;
-    buff_ptr = buffer + BUFFER_SIZE;
-  }
-
-  if (current_file != file) // get_line called with new file before eof
-    return -1;
-    
-  http_message result;
-  initialize_http_message(&result);
-
-  int crlf = 0;
-  int eof = 0;
-  int buffer_size = BUFFER_SIZE; // Most of the times buffer_size == BUFFER_SIZE, 
-                                 // but at the end of file buffer_size is smaller
-
-  do { 
-    // Character before buff_ptr. If buff_ptr == buffer this is last character
-    // in previous buffer
-    char prev_char = ((buff_ptr == buffer)?last_char:*(buff_ptr - 1)); 
-    // search from buff_ptr to the end of buffer
-    char *newline = seek_crlf(buff_ptr, buffer_size - (buff_ptr - buffer), prev_char); 
-
-    if (newline != NULL) { 
-      crlf = 1; // CRLF found
-      newline++; // Put newline pointer after LF character
-    } else {
-      newline = buffer + buffer_size;
-    }
-
-    // append current buffer to result.
-    if (append(&result, buff_ptr, newline - buff_ptr) == -1) return -1;
-
-    buff_ptr = newline;
-
-    if (crlf == 0 && eof == 0) { // No new line found. Have to read more data
-      
-      last_char = *(buffer + buffer_size - 1);
-
-      // read new buffer
-      int res = fread(buffer, sizeof(char), BUFFER_SIZE, current_file);
-      buff_ptr = buffer; // reset buff_ptr to the beginning of the buffer
-      if (res < BUFFER_SIZE) {
-        if (feof(current_file)) {
-          eof = 1;
-        } else {
-          return -1; // error in fread occured
-        }
-      }
-    }
-  } while (crlf == 0);
-
-  if (eof) {
-    // TODO reset
-  }
-
-  *line = result.message;
-
-  return result.length;
-}
+//// Read from the socket until CRLF into allocated buffer and save this buffer 
+//// into *line. If line is NULL data is ignored. If this function is called with
+//// different file pointer before end of current file error is returned.
+//// Returns -1 on error or length of line otherwise.
+//int get_line(char **line, FILE *file) { 
+//  static char *buffer = NULL;
+//  static char *buff_ptr = NULL; // Points to first non-processed byte 
+//  static FILE *current_file = NULL;
+//  char last_char; // last character in previous buffer
+//
+//  if (buffer == NULL) { // new FILE*
+//    buffer = malloc(sizeof(char) * BUFFER_SIZE);
+//    current_file = file;
+//    buff_ptr = buffer + BUFFER_SIZE;
+//  }
+//
+//  if (current_file != file) // get_line called with new file before eof
+//    return -1;
+//    
+//  http_message result;
+//  initialize_http_message(&result);
+//
+//  int crlf = 0;
+//  int eof = 0;
+//  int buffer_size = BUFFER_SIZE; // Most of the times buffer_size == BUFFER_SIZE, 
+//                                 // but at the end of file buffer_size is smaller
+//
+//  do { 
+//    // Character before buff_ptr. If buff_ptr == buffer this is last character
+//    // in previous buffer
+//    char prev_char = ((buff_ptr == buffer)?last_char:*(buff_ptr - 1)); 
+//    // search from buff_ptr to the end of buffer
+//    char *newline = seek_crlf(buff_ptr, buffer_size - (buff_ptr - buffer), prev_char); 
+//
+//    if (newline != NULL) { 
+//      crlf = 1; // CRLF found
+//      newline++; // Put newline pointer after LF character
+//    } else {
+//      newline = buffer + buffer_size;
+//    }
+//
+//    // append current buffer to result.
+//    if (append(&result, buff_ptr, newline - buff_ptr) == -1) return -1;
+//
+//    buff_ptr = newline;
+//
+//    if (crlf == 0 && eof == 0) { // No new line found. Have to read more data
+//      
+//      last_char = *(buffer + buffer_size - 1);
+//
+//      // read new buffer
+//      int res = fread(buffer, sizeof(char), BUFFER_SIZE, current_file);
+//      buff_ptr = buffer; // reset buff_ptr to the beginning of the buffer
+//      if (res < BUFFER_SIZE) {
+//        if (feof(current_file)) {
+//          eof = 1;
+//        } else {
+//          return -1; // error in fread occured
+//        }
+//      }
+//    }
+//  } while (crlf == 0);
+//
+//  if (eof) {
+//    // TODO reset
+//  }
+//
+//  *line = result.message;
+//
+//  return result.length;
+//}
 
 // Read header line until CRLF
 // Buffer should be freed afterwards by caller
@@ -293,7 +293,6 @@ size_t read_chunked(FILE *conn) {
   size_t chunk_size = 0;
   size_t total_size = 0;
   char *chunk_data = NULL;
-  size_t chunk_data_len = 0;
 
   char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
   
@@ -356,7 +355,7 @@ parsed_http_response parse_message(int fd) {
   char *current_line = NULL;
   size_t current_line_len = 0;
   char *next_line = NULL;
-  size_t next_line_len = get_header(&next_line, http_response);
+  int next_line_len = get_header(&next_line, http_response);
 
   if (next_line_len == -1) {
     return response;  
@@ -457,7 +456,7 @@ parsed_http_response parse_message(int fd) {
         }
 
         char *endptr = NULL;
-        int content_length = strtol(field_value, &endptr, 10);
+        long int content_length = strtol(field_value, &endptr, 10);
         if ((content_length == 0 && *endptr != 0) 
             || content_length == LONG_MAX 
             || content_length == LONG_MIN) {
@@ -518,6 +517,3 @@ parsed_http_response parse_message(int fd) {
   return response;
 }
 
-// TODO czy ta funkcja potrzebna?
-void end_message(http_message *message) {
-}

@@ -11,7 +11,7 @@ typedef struct {
 
 typedef struct {
   http_message cookies;
-  size_t content_length;
+  int content_length;
   size_t real_body_length;
   int chunked;
   int status_code;
