@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
+#include <ctype.h>
 
 #define INITIAL_MESSAGE_SIZE 256
 #define BUFFER_SIZE (1<<13) // ~8kb
@@ -26,9 +27,9 @@ char CONNECTION[] = "Connection";
 char CLOSE[] = "close";
 char COOKIE[] = "Cookie";
 char COOKIE_VERSION[] = "$Version=0;";
-char SET_COOKIE[] = "Set-Cookie"; // TODO sprawdzić literówki
-char TRANSFER_ENCODING[] = "Transfer-Encoding";
-char CONTENT_LENGTH[] = "Content-Length";
+char SET_COOKIE[] = "set-cookie"; // TODO sprawdzić literówki
+char TRANSFER_ENCODING[] = "transfer-encoding";
+char CONTENT_LENGTH[] = "content-length";
 char CHUNKED[] = "chunked"; // TODO make this case insensitive
 
 int initialize_http_message(http_message *message) {
@@ -311,6 +312,13 @@ size_t read_chunked(FILE *conn) {
   return total_size;
 }
 
+void strtolower(char *string) {
+  while (*string != 0) {
+    *string = tolower(*string);
+    string++;
+  }
+}
+
 parsed_http_response parse_message(int fd) {
   // TODO cleaner way to initialize
   parsed_http_response response;
@@ -394,6 +402,10 @@ parsed_http_response parse_message(int fd) {
         return response;
       }
       char *field_value = colon_pos + 1;
+
+      *colon_pos = 0; // Split name and value
+      
+      strtolower(field_name);
 
       size_t field_name_len = field_value - field_name - 1;
       size_t field_value_len = current_line_len - field_name_len - 1;
