@@ -233,7 +233,7 @@ int get_line(char **line, FILE *file) {
   } while (crlf == 0);
 
   if (eof) {
-    //reset
+    // TODO reset
   }
 
   *line = result.message;
@@ -276,10 +276,12 @@ size_t read_chunked(FILE *conn) {
   char *chunk_data = NULL;
   size_t chunk_data_len = 0;
 
+  char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
+  
   int res;
 
   do {
-    res = get_line(&chunk_size_buff, conn);
+    res = getline(&chunk_size_buff, &chunk_size_buff_len, conn);
     if (res == -1) return -1;
     
     chunk_size = strtol(chunk_size_buff, NULL, 16);
@@ -289,13 +291,22 @@ size_t read_chunked(FILE *conn) {
       break;
     }
 
-    res = get_line(&chunk_data, conn);
-    if (res == -1) return -1;
+    // Read chunk data
+    size_t data_to_read = chunk_size + 2; // chunk data + CRLF
+    while (data_to_read > 0) {
+      int nitems = (BUFFER_SIZE <= data_to_read)?BUFFER_SIZE:data_to_read;
+      res = fread(buffer, sizeof(char), nitems, conn);
+     
+      if (res == 0 && ferror(conn))
+        return -1; // error occured
 
+      data_to_read -= res;
+    }
   } while (chunk_size > 0);
 
   free(chunk_size_buff);
   free(chunk_data);
+  free(buffer);
 
   return total_size;
 }
@@ -487,7 +498,7 @@ parsed_http_response parse_message(int fd) {
       response.real_body_length += res;
     } while (res == BUFFER_SIZE);
 
-//    if (/*check stream error*/) {}
+// TODO    if (/*check stream error*/) {}
   }
 
   if (fclose(http_response) != 0) {
