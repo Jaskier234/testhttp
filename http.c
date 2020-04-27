@@ -325,7 +325,7 @@ parsed_http_response parse_message(int fd) {
   initialize_http_message(&response.cookies);
   response.content_length = -1;
   response.real_body_length = 0;
-  response.transfer_encoding = -1; // -1 none. 1 chunked. 0 other
+  response.chunked = 0; // -1 none. 1 chunked. 0 other
   response.failed = 1; // Failed initially is set to true so response is considered
                        // incorrect until the end of the function.
 
@@ -452,33 +452,12 @@ parsed_http_response parse_message(int fd) {
           response.content_length = -2; // Content-Length field is incorrect
         }
       } else if (memcmp(TRANSFER_ENCODING, field_name, field_name_len) == 0) {
-        if (response.transfer_encoding == -1) {
-          response.transfer_encoding = 0;
+        if (memcmp(field_value, CHUNKED, strlen(CHUNKED)) != 0) {
+          response.chunked = 1;
+        } else {
+          // Unsupported transfer encoding.
+          fatal("Unsupported transfer encoding");
         }
-
-        int cmp_res;
-        while ((cmp_res = memcmp(field_value, CHUNKED, strlen(CHUNKED))) != 0) {
-          // find delimiter (',')
-          char *delim = memchr(field_value, ',', field_value_len);
-          if (delim == NULL) {
-            break;
-          }
-          // move field_value beggining one char after delimiter
-          delim++;
-          field_value_len -= delim - field_value;
-          field_value = delim;
-
-          // skip whitespaces after delimiter
-          while(*field_value == SP || *field_value == HTAB) {
-            field_value++;
-            field_value_len--;
-          }
-        } 
-
-        if (cmp_res == 0) {
-          response.transfer_encoding = 1; // transfer-encoding: chunked
-        }
-  
       } else if (memcmp(SET_COOKIE, field_name, field_name_len) == 0) {
         char *delim = memchr(field_value, ';', field_value_len);
         if (delim != NULL) {
@@ -494,7 +473,7 @@ parsed_http_response parse_message(int fd) {
 
   } while (memcmp(CRLF, next_line, 3) != 0);
 
-  if (response.transfer_encoding == 1) {
+  if (response.chunked == 1) {
     // Chunked
     response.real_body_length = read_chunked(http_response);
 

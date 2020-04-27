@@ -13,7 +13,7 @@ typedef struct {
   http_message cookies;
   size_t content_length;
   size_t real_body_length;
-  int transfer_encoding; // -1 none. 1 chunked. 0 other
+  int chunked;
   int status_code;
   char *status_line;
   int failed;
